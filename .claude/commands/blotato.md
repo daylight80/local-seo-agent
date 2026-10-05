@@ -45,7 +45,7 @@ Returns `{"items":[{"id":"98432","platform":"twitter","fullname":"Jane Smith","u
 
 **⛔ Never invent an account id, a platform key or a payload field.** If a call fails or the shape does not match this file, STOP and say exactly what came back. Blotato restructured its docs once already, so check `https://help.blotato.com/llms-full.txt` (the full text export, and the best source) or `https://backend.blotato.com/openapi.json` rather than writing to a schema you inferred. A guessed field name is how a batch reports success and schedules nothing.
 
-**⛔ Reddit and Google Business Profile are not supported.** They are absent from the API entirely. If I ask for either, say so plainly - GBP posts are `/gbp-post`, which owns that surface through Make.com.
+**⛔ Reddit and Google Business Profile are not supported.** They are absent from the API entirely. If I ask for either, say so plainly - GBP posts are `/gbp-post`, which owns that surface through Metricool.
 
 ---
 

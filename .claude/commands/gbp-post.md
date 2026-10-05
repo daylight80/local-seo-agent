@@ -1,63 +1,71 @@
 ---
-description: GBP posts - a month generated to spec (or a single post), queued, and dripped to the Make.com webhook at 2-3/week
+description: GBP posts - a month generated to spec (or a single post), queued, and scheduled in Metricool at 2-3/week
 argument-hint: [one | offer | event | topic, optional]
 ---
 
-## STEP 0. The Make.com webhook. Nothing happens before this.
+## STEP 0. Metricool, connected to the profile. Nothing happens before this.
 
-Read CLAUDE.md "## My setup" for `MAKE_WEBHOOK_URL` and `DEFAULT_CTA_URL`. **If either is missing, empty, or still a placeholder (`[YOUR_WEBHOOK_ID]`), your FIRST message is this question and nothing else.** Do not read the spec, do not read context, do not draft a post.
+Posts publish through **Metricool**, which schedules them and publishes them to the Google Business Profile at the set time, with no laptop open and no GitHub Action. Claude talks to it through the Metricool connector (the `createScheduledPost`, `getScheduledPosts`, `getBrandSettings` and `getBestTimeToPostByNetwork` tools).
 
-> "Before I write anything: paste your Make.com webhook URL so posts can go live the second they're approved. Don't have one? In Make.com create a scenario, add a 'Webhooks · Custom webhook' trigger, copy the URL. About 30 seconds."
+Read CLAUDE.md "## My setup" for `METRICOOL_BLOG_ID`, `METRICOOL_TIMEZONE` and `DEFAULT_CTA_URL`. **If any is missing, run these checks and make the first failing one your FIRST message, and nothing else.** Do not read the spec, do not read context, do not draft a post.
 
-**⛔ Never ask for the GBP account or location.** Those are chosen inside the Make.com "Create Local Post" module from its own dropdowns when the scenario is built. They are not skill config, they are not in the payload, and they are not something the owner can look up in their GBP dashboard. Asking for them is a dead end at step 0.
+1. **The connector.** If the Metricool tools are not available in this session, ask:
+   > "Before I write anything: connect Metricool so posts can go live on their own. In Claude: Settings → Connectors → Metricool → Connect. Free plan works for one brand."
+2. **The profile.** Call `getBrandSettings`. If there is more than one brand, ask which one is this business. If the brand has no Google Business Profile connected (no `gmb` network), ask:
+   > "Metricool is connected, but your Google Business Profile isn't linked to it yet. In Metricool: your brand → Connections → Google Business Profile → Connect, and pick this location. About a minute."
+3. **The link.** `DEFAULT_CTA_URL` is the home page. Take it from `context/business.md` if it is there; ask only if it is not.
 
-Save them to "## My setup" so this is never asked twice. Then **fire one real test post** and confirm BOTH signals before generating anything else: the webhook's response status (the Make scenario replies **200 only when the post was actually sent** - a timeout or any other status means it did NOT go through), and the post appearing on the profile. The first run needs both; after that, the 200 response is the per-post confirmation. A webhook nobody has proven is a webhook that fails on the whole month.
+Save the brand's `blogId`, its timezone (from `getBrandSettings`) and the home page to "## My setup" so this is never asked twice.
+
+**⛔ Never ask for the GBP account or location ID.** The location is chosen once, inside Metricool, when the profile is connected to the brand. It is not skill config and it is not in the payload.
+
+Then **schedule one real test post a few minutes out** and confirm BOTH signals before generating anything else: `createScheduledPost` returns a `plannerUrl` (Metricool accepted it), and after the scheduled time the post is actually on the profile. The first run needs both; after that, the `plannerUrl` is the per-post receipt, and `getScheduledPosts` shows anything Metricool failed to publish. A connection nobody has proven is a connection that fails on the whole month.
 
 **Only if I reply "skip it":** generate the batch paste-ready for manual posting and say plainly that automatic posting is off.
 
-This is the one question asked BEFORE any work happens, and it is mandatory. Later steps do stop for approval - the unsent queue, the angle bank, a missing Pexels key, and the batch itself - but nothing is generated until the webhook question is answered.
+### What the Metricool route can and cannot post
+
+Metricool's Google Business Profile post is a **"publication"**: an update with text (up to 1,500 characters) and one photo. It has **no title field, no button, and no Offer or Event type**. So on this route:
+
+- **Every post goes out as an update.** The `title` becomes the post's opening line, followed by a blank line and the summary.
+- **Offers are written as updates that carry the offer:** what it is, the code, the dates and how to redeem ("mention this post when you call"), all in the text. They do not get Google's yellow "Offer" badge.
+- **Links in the text are not clickable on Google.** Write the action as a sentence ("Call us", "Book on our website") and leave the URL out of the body.
+- **If I want a real Offer or Event post with the badge and button**, say so in one line in the action list: post that one by hand in the Google Business Profile editor, or switch on the optional Make.com route described in `references/gbp-posts.md`. Never stop the batch over it.
+
+This is the one question asked BEFORE any work happens, and it is mandatory. Later steps do stop for approval - the unsent queue, the angle bank, a missing Pexels key, and the batch itself - but nothing is generated until Metricool is confirmed.
 
 ## STEP 0.2. ⛔ THE EXISTING QUEUE EATS FIRST. THIS IS YOUR SECOND MESSAGE, BEFORE ANY RESEARCH.
 
-**Read `gbp-posts-queue.md` before anything else.** Not after the voice file, not after the angle bank - immediately after the webhook is confirmed. Generating a fresh month while approved posts sit unsent is the single most wasteful thing this command can do, and it happens because this step is easy to scroll past.
+**Read `gbp-posts-queue.md` before anything else.** Not after the voice file, not after the angle bank - immediately after Metricool is confirmed. Generating a fresh month while approved posts sit unsent is the single most wasteful thing this command can do, and it happens because this step is easy to scroll past.
 
-**If the queue holds posts that are approved but never went out** - Pending or Scheduled, no `sent_at`, usually written back when there was no webhook - stop and ask:
+**If the queue holds posts that are approved but never went out** - Pending or Scheduled, no `sent_at`, usually written back when automatic posting was off - stop and ask:
 
-> **"You've got 8 approved posts in the queue that never went out - there was no webhook when they were written, and now there is one. Want me to schedule those first? They'd drip Mon/Wed/Fri from [date]. Or I can generate fresh ones and leave these."**
+> **"You've got 8 approved posts in the queue that never went out - automatic posting was off when they were written, and now Metricool is connected. Want me to schedule those first? They'd go out Mon/Wed/Fri from [date]. Or I can generate fresh ones and leave these."**
 
 **Check staleness before offering, and say what you find in one line.** A post referencing "next month's deadline" or a feature that has since shipped is not schedulable - flag those individually, offer to refresh just those, and schedule the rest. Never quietly ship a post whose date reference has expired.
 
-**⛔ TITLES ARE 58 CHARACTERS MAX.** Google rejects longer ones and Make only says so after the scenario runs, losing the post. Write to 58 from the start rather than trimming a long headline - a trimmed headline reads like a trimmed headline. The full caps:
+**⛔ KEEP THE TITLE TO 58 CHARACTERS AND THE WHOLE POST UNDER 1,500.** On the Metricool route the title is the opening line, so title + blank line + summary must fit Google's 1,500-character cap. Write the title to 58 from the start (it reads like a subject line, and it keeps the Make.com route usable if it is ever switched on) rather than trimming a long headline - a trimmed headline reads like a trimmed headline.
 
-| Field | Cap |
-|---|---|
-| `title` | **58 characters** |
-| `event_title` | 58 characters |
-| `coupon_code` | 58 characters |
-| `summary` | 1,500 characters |
+**⛔ VALIDATE BEFORE YOU CLAIM ANYTHING IS QUEUED. `python3 code/check_gbp_payload.py gbp-queue` must exit 0.** It checks the length caps, the photo (public https, JPG or PNG, under 2 MB), the date (not in the past) and the spacing (max 3 a week, at least 2 days apart). Never report posts as scheduled until the validator passes, the `.yml` files exist on disk, and each one carries the `plannerUrl` Metricool returned.
 
-**⛔ VALIDATE BEFORE YOU CLAIM ANYTHING IS QUEUED. `python3 code/check_gbp_payload.py gbp-queue` must exit 0.** A payload with `post_type: "UPDATE"`, `cta_type` or `image_url` gets a **200 from Make and publishes nothing** - the Router matches no branch, so the send looks successful and the profile stays empty. That exact payload shipped once. Only three `post_type` values exist: `"Call to action"`, `"Event"`, `"Offer"`. Never report posts as scheduled until the validator passes and the `.yml` files exist on disk.
+**On a yes:** write each to `gbp-queue/` as a dated YAML with `send_after` spaced per the caps, schedule each in Metricool (see "Ship" below), and mark them Scheduled in `gbp-posts-queue.md`. Then stop - do not also generate a new month unless I ask.
 
-**On a yes:** write each to `gbp-queue/` as a dated YAML with `send_after` spaced per the caps, and mark them Scheduled in `gbp-posts-queue.md`. Then stop - do not also generate a new month unless I ask.
+### ⛔ Then make the FIRST one go out soon, as the live proof
 
-### ⛔ Then PUSH THE FIRST ONE IMMEDIATELY, as the live proof
+A queue nobody has watched work is a queue nobody trusts. So the first post does not wait for its slot:
 
-A queue nobody has watched work is a queue nobody trusts, and a webhook that has never carried a real post is a webhook that fails on the whole month. So the first post does not wait for the cron:
+1. **Schedule it in Metricool for a few minutes from now** and read the response. A `plannerUrl` means Metricool accepted it; an error means it did not, and every post after it would fail the same way. On an error, stop and fix it.
+2. **Send me to look at the profile** once the time has passed, and confirm the post is actually there. Metricool accepting it proves nothing about Google publishing it. **Wait for me to confirm** - do not proceed on the `plannerUrl` alone.
+3. **Move it to `gbp-queue/sent/` with today's `sent_at`** and mark it Published in `gbp-posts-queue.md`, so it can never be scheduled twice.
+4. **Then say what happens next in one line:** the rest are already sitting in Metricool's planner and publish on their own on the dates listed.
 
-1. **POST it to the Make.com webhook right now** and read the response. **200 means sent - anything else means it did not go**, and a timeout is not a 200. On a non-200, stop: the webhook is wrong and every scheduled post after it would fail the same way, silently, at 9am on a Monday.
-2. **Send me to look at the profile** and confirm the post is actually there. The webhook answering 200 proves Make received it; only the profile proves Google published it. **Wait for me to confirm** - do not proceed on the 200 alone.
-3. **Move it to `gbp-queue/sent/` with today's `sent_at`** and mark it Published in `gbp-posts-queue.md`, so it can never send twice.
-4. **Then say what happens next in one line:** the rest drip Mon/Wed/Fri via `.github/workflows/gbp-post.yml`, one per run, and each one moves to `sent/` on a 200.
+**⛔ THEN LEAVE POST 2 ALONE.** Post 1 proves the connection carries a real post. Post 2 is the proof that Metricool publishes unattended, which is the part that has to work every week for a year without anyone watching. Say exactly what to look for:
 
-**⛔ THEN DATE THE SECOND POST FOR THE NEXT CRON DAY, AND LEAVE IT ALONE.** Pushing the first post by hand proves the webhook carries a real post. It proves nothing about whether the Action fires on its own, which is the part that has to work every week for a year without anyone watching.
+> **"Post 2 goes out Wednesday and I'm not touching it. Check your profile Wednesday afternoon - and Metricool's planner will show it as published."**
 
-The GBP cron runs **Mon/Wed/Fri**, so set post 2's `send_after` to the next one of those - not "tomorrow", which may not be a run day. Then say exactly what to look for:
+**Never block on it.** Say it, schedule it, move on. If it has not appeared, `getScheduledPosts` shows whether Metricool tried and what Google said.
 
-> **"Post 2 goes out Wednesday and I'm not touching it. Check your profile Wednesday afternoon - and the Actions page will show a run with no username next to it. That's the scheduler working unattended."**
-
-**Never block on it.** Say it, schedule it, move on. If it has not fired by that evening, check the run log before assuming the webhook broke - GitHub schedules run late under load, and the script also refuses to send if the weekly cap or the minimum gap would be breached, which looks identical to a failure from the outside but is the caps doing their job.
-
-**This runs once, on the first real batch.** After the webhook has carried a live post, later runs schedule everything and push nothing by hand.
+**This runs once, on the first real batch.** After the connection has carried a live post, later runs schedule everything and push nothing early.
 
 ## STEP 0.5. Read the voice file. Then write in it, not near it.
 
@@ -155,21 +163,30 @@ Save it to `.env` so nothing asks twice. Then pull with `python3 code/fetch_stoc
 
 **The batch (per the spec):**
 - **Every post traces to an angle from Step 1.** A post you cannot point back to a lane and a specific fact is a post written from memory - cut it and take the next angle off the bank.
-- Cadence 2-3/week (the cap enforced by the publisher) → generate a month (4-8 posts) in the spec's monthly mix: ~50% Offers (the yellow-badge converter), ~30% Updates as "Call to action" posts (seasonal tips, customer stories from my real jobs), Event only if one exists, 1 product/service spotlight
+- Cadence 2-3/week (the cap enforced by `check_gbp_payload.py`) → generate a month (4-8 posts) in the spec's monthly mix: ~50% offer posts, ~30% updates (seasonal tips, customer stories from my real jobs), an event only if one exists, 1 product/service spotlight. On the Metricool route all of them go out as updates (see Step 0); the mix is about what each post says
 - Every post: the 3 justification-bait layers (specific service variant + ONE real local detail + a long-tail phrase a customer would actually say), first-100-chars hook, image_query for the stock pull (real photos from `context/proof/images/` beat stock - use them first), CTA always. **Baited means woven in so it reads as writing. If you can see the layer, it failed.**
-- **⛔ Every post ships with an image. No exceptions.** The ladder: a real photo from `context/proof/images/` → stock via `code/fetch_stock_photos.py` → if the first query returns nothing usable, rewrite the query and pull again until one does. A post with no image is a failed post, not a shipped one - it never goes to the webhook and never lands in the queue as ready.
+- **⛔ Every post ships with an image. No exceptions.** The ladder: a real photo from `context/proof/images/` → stock via `code/fetch_stock_photos.py` → if the first query returns nothing usable, rewrite the query and pull again until one does. A post with no image is a failed post, not a shipped one - it never goes to Metricool and never lands in the queue as ready.
 - **⛔ Team faces and testimonial shots are not decoration.** A team photo goes on a post ABOUT the team (a hire, a milestone, behind-the-scenes); a testimonial image goes on the post telling THAT customer's story. Neither gets slapped on a seasonal tip because it was the nearest "real" photo - a face on an unrelated post reads as filler, and it spends the credibility of the person in it. When the proof folder has nothing that matches the post's actual subject, that's what the stock rung of the ladder is for.
-- **⛔ The link is the home page. Never ask which page a post points at.** `cta_url` (and `redeem_online_url`) default to `DEFAULT_CTA_URL` on every post, silently. A deeper page happens only if I named one, or the post covers one service that already has a live page in `website-index.md` - and that page gets verified before it is used. Eight posts is eight silent home-page links, not eight questions. See "The link on every post" in the spec.
-- Offer posts: ALL required fields generated per the spec's rules (coupon_code format, redeem URL, ISO dates, 7-day window, terms default)
+- **⛔ The link is the home page. Never ask which page a post points at.** `cta_url` (and `redeem_online_url`) default to `DEFAULT_CTA_URL` on every post, silently. On the Metricool route the link is not sent (there is no button), but keep the field: it is what the owner sees in the queue and what the Make.com route would use. A deeper page happens only if I named one, or the post covers one service that already has a live page in `website-index.md` - and that page gets verified before it is used. Eight posts is eight silent home-page links, not eight questions. See "The link on every post" in the spec.
+- Offer posts: ALL the offer facts generated per the spec's rules (confirmed coupon code, ISO dates, 7-day window, terms default), and on the Metricool route the code, dates and how to redeem are written into the text itself
 - Lengths per the spec's real-world table - short beats the guides' claims
-- **⛔ Photos go to Make.com as public https URLs, never local paths.** Google downloads the image itself, so `website/public/images/...` fails silently. Download the photo, put it in `website/public/images/`, publish it, send the live URL. Site not published? That is a `/publish` job - say so and offer to run it, never file it as "photos cannot attach automatically".
+- **⛔ Photos go to Metricool as public https URLs, never local paths.** Metricool and Google download the image themselves, so `website/public/images/...` fails silently. Download the photo, put it in `website/public/images/`, publish it, send the live URL. Site not published? That is a `/publish` job - say so and offer to run it, never file it as "photos cannot attach automatically".
 
 **Ship:** show me the month as a legible list (title + type + week + the hook line) and get ONE yes on the batch. Then:
 
-- **⛔ Scheduled - THE DEFAULT. One approval covers the whole month.** Write each approved post as a dated YAML file in `gbp-queue/` (payload fields per the spec, plus `send_after: YYYY-MM-DD` spaced across the month). The GitHub Action (`.github/workflows/gbp-post.yml`, Mon/Wed/Fri cron) ships them with no laptop open: **max one post per run**, and `code/publish_due_gbp_posts.py` independently enforces the 2-3/week cap and a minimum gap between posts, so a mistake in the dates cannot cause a burst. On a 200 the post moves to `gbp-queue/sent/` with a `sent_at` stamp and is deleted from the queue - **it can never send twice.** A non-200 leaves it in the queue and turns the run red, so a miss is visible rather than silent. Needs `MAKE_WEBHOOK_URL` saved once as a GitHub Actions secret - walk me through it the first time.
+- **⛔ Scheduled - THE DEFAULT. One approval covers the whole month.** Write each approved post as a dated YAML file in `gbp-queue/` (payload fields per the spec, plus `send_after: YYYY-MM-DD` spaced Mon/Wed/Fri across the month), run the validator, then schedule each one with `createScheduledPost`:
+  - `blogId`: `METRICOOL_BLOG_ID` from "## My setup"
+  - `date` and `info.publicationDate`: the `send_after` day at 09:00 in `METRICOOL_TIMEZONE` (or the slot `getBestTimeToPostByNetwork` gives for `gmb`, if I asked for best times)
+  - `info.providers`: `[{"network": "gmb"}]`, `info.gmbData`: `{"type": "publication"}`, `info.autoPublish`: true, `info.draft`: false
+  - `info.text`: the title, a blank line, then the summary, plain text
+  - `info.media`: `[media_items]` (the public https photo URL)
 
-  **Never ask which lane I want.** Approving the batch means schedule it. A month of posts is written to be read over a month, and firing eight at once buries seven of them - the profile shows the newest and the rest scroll away the same afternoon. Report the dates each post will go out on, then stop.
+  Write the returned `plannerUrl` into the post's YAML as `metricool_planner_url` and move the file to `gbp-queue/scheduled/`. **A file in `scheduled/` or `sent/` is never scheduled again**, so a re-run cannot double-post. An error from Metricool leaves the file in `gbp-queue/`, gets ONE retry, then lands in the failure list with the error text as Metricool returned it.
 
-- **Now - only if I explicitly say "post them all now" or "publish immediately".** POST each to the webhook and read the response per post - **200 means sent, anything else means it did not go.** A 200 flips that post's status in `gbp-posts-queue.md`; a non-200 or timeout leaves it Pending, gets ONE retry, then lands in the failure list with its status code. Never mark a post sent on the strength of having fired the request - the response is the receipt. Report sent/failed per post. **Say what it costs before doing it:** eight posts in one afternoon means seven are buried by the eighth.
+  **Never ask which lane I want.** Approving the batch means schedule it. A month of posts is written to be read over a month, and firing eight at once buries seven of them - the profile shows the newest and the rest scroll away the same afternoon. Report the dates each post will go out on, with its Metricool link, then stop.
+
+- **Now - only if I explicitly say "post them all now" or "publish immediately".** Schedule each a few minutes apart starting a few minutes from now, read each response, and report scheduled/failed per post. **Say what it costs before doing it:** eight posts in one afternoon means seven are buried by the eighth.
+
+- **Optional: the Make.com route.** Only if I ask for real Offer or Event posts with Google's badge and button. The original webhook setup is kept in `references/gbp-posts.md` ("Optional: the Make.com route") and `code/publish_due_gbp_posts.py`. Mark those posts `route: make` in their YAML and the validator checks them against Make's schema instead.
 
 Page-announcement posts arrive through this same queue and obey the same caps, so a month of content and a batch of new-page announcements cannot collide into a burst.

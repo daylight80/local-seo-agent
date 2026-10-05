@@ -11,17 +11,17 @@ export const site = {
   // money pages stay form-only, one primary CTA each). Leave it null and that
   // section simply doesn't render.
   // GHL > Calendars > the calendar > copy the booking link.
-  bookingUrl: "https://api.leadconnectorhq.com/widget/booking/QA8PbyzPUGUZv1dABc8L" as string | null,
+  bookingUrl: null as string | null,
   // --- The review machine (/review-generator) ---
   // Where 4-5 star clicks go. GBP > "Ask for reviews" > "Share review form".
   // Looks like https://g.page/r/XXXXXXXX/review
-  googleReviewUrl: "https://g.page/r/CWtHXEVwd-eFEAE/review" as string | null,
+  googleReviewUrl: null as string | null,
   // Where 1-3 star feedback goes so a human actually sees it. A Make.com
   // custom webhook, or a GHL inbound-webhook workflow trigger.
   // PUBLIC by design: the site is a static export, so there is no server route
   // to hide this behind and /review posts to it straight from the browser.
   // It is write-only. See the note at the top of app/review/review-form.tsx.
-  reviewFeedbackWebhook: "https://hook.us2.make.com/kudzpeykjrsjqx9vwmkqycmqwydi6fcw" as string | null,
+  reviewFeedbackWebhook: null as string | null,
 
   phone: "(555) 000-0000",
   email: "hello@yourbusiness.com",

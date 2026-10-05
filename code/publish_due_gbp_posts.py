@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Publish due GBP posts from gbp-queue/ to the Make.com webhook.
+"""OPTIONAL Make.com route. Publish due GBP posts from gbp-queue/ to the Make.com webhook.
+
+The default route is Metricool: /gbp-post schedules posts straight into
+Metricool, which publishes them, and this script is not needed. Use it only
+for posts marked `route: make` (real Offer/Event posts), and it sends only those.
 
 Runs from GitHub Actions on a Mon/Wed/Fri cron (or by hand: python3
 code/publish_due_gbp_posts.py). Each run sends AT MOST ONE due post, so the
@@ -62,6 +66,8 @@ def main():
     due = []
     for f in sorted(QUEUE.glob("*.yml")):
         post = yaml.safe_load(f.read_text())
+        if str(post.get("route", "metricool")).lower() != "make":
+            continue  # Metricool posts are scheduled by /gbp-post, never sent here
         stamp = post.get("send_after")
         if stamp and datetime.date.fromisoformat(str(stamp)[:10]) <= today:
             due.append((f, post))
