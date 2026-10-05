@@ -60,7 +60,7 @@ Nothing to start. Each command asks for what it needs the first time it runs and
 As you go:
 
 - **Semrush** for real search volumes. Without it, volumes are marked as estimates rather than invented.
-- **A Make.com webhook** so `/gbp-post` can publish. Google's Business Profile API needs manual approval and takes weeks; Make is free and works immediately.
+- **Metricool** so `/gbp-post` can publish. Connect the Metricool connector in Claude and link your Google Business Profile to your Metricool brand; posts are scheduled straight into Metricool's planner. (A Make.com webhook is still supported as an optional route for real Offer and Event posts.)
 - **A Pexels API key** for photos. Free, no card.
 - **GitHub and Vercel** for `/publish`. One-time setup, then every future change is one push.
 - **Blotato** for `/blotato`. Paid-only, so skip it unless you are scheduling social posts.

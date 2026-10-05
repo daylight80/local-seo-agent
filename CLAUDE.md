@@ -12,7 +12,7 @@ Nine Claude Code commands that take a local business from an empty Google Busine
 |---|---|---|
 | 1 | `/gbp-build` | Fills the whole Google Business Profile: 10 categories, 50 services ranked by search volume, 20 products, the 750-character description, hours, attributes, service area, and the citation list |
 | 2 | `/reviews` | Writes the review request sequence and the reply templates, and wires the automation so every finished job asks |
-| 3 | `/gbp-post` | Generates a month of profile posts, queues them, and drips them 2 to 3 a week |
+| 3 | `/gbp-post` | Generates a month of profile posts and schedules them in Metricool, 2 to 3 a week |
 | 4 | `/keyword-research` | Builds the keyword map: every term, filtered, clustered, and routed to a page type |
 | 5 | `/service-page` | One money page per service and area pair, built from the map |
 | 6 | `/blog-post` | One local blog post, written to rank and to link down to a money page |
@@ -31,7 +31,7 @@ Nothing to start. Every command asks for what it needs the first time it runs, a
 As you go, some commands will want:
 
 - **Semrush** for real search volumes. Without it, volumes are marked as estimates.
-- **A Make.com webhook** so `/gbp-post` can publish to the profile. The Business Profile API needs manual approval and takes weeks; Make is free and works immediately.
+- **Metricool** so `/gbp-post` can publish to the profile: the Metricool connector in Claude, with the Google Business Profile linked to the Metricool brand. A Make.com webhook stays available as an optional route for real Offer and Event posts.
 - **A Pexels API key** for stock photos. Free, no card.
 - **GitHub and Vercel logins** for `/publish`. One-time, then every future change is one push.
 - **A Blotato key** for `/blotato`. Paid-only, so skip it if you are not scheduling social posts.

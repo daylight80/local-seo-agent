@@ -1,12 +1,32 @@
 # Google Business Profile posts - how to write them and how to send them
 
-The rules Claude reads before writing any GBP post, plus the exact payload Make.com expects.
+The rules Claude reads before writing any GBP post, plus how each one gets published: through Metricool by default, or through the optional Make.com webhook for real Offer and Event posts.
 Built as part of the seo-blueprint-pro reference set. Pairs with `tone.md`, `humour.md`, `vocabulary.md` and `business-context.md`.
-Next: draft the posts into `gbp-posts-queue.md`, then POST each one to the Make.com webhook.
+Next: draft the posts into `gbp-posts-queue.md`, then schedule each one in Metricool (see "Publishing through Metricool" below).
 
 ---
 
-## Never do these - they break the Make.com router
+## Publishing through Metricool (the default)
+
+Metricool schedules each post and publishes it to the Google Business Profile at the set time. Claude schedules through the Metricool connector's `createScheduledPost` tool; nothing else needs to run.
+
+**One-time setup:** connect the Metricool connector in Claude, then in Metricool link the Google Business Profile to the brand (brand → Connections → Google Business Profile). Record the brand's `blogId` and timezone in CLAUDE.md "## My setup" as `METRICOOL_BLOG_ID` and `METRICOOL_TIMEZONE`.
+
+**What Metricool sends to Google is an update ("publication"):** text up to 1,500 characters plus one photo. No title field, no button, no Offer or Event type. So:
+
+- `info.text` is the `title`, a blank line, then the `summary`. Title + summary must fit 1,500 characters.
+- `info.media` is `[media_items]`: one public https JPG or PNG under 2 MB.
+- `info.providers` is `[{"network": "gmb"}]` and `info.gmbData` is `{"type": "publication"}`.
+- `post_type`, `cta_action`, `cta_url`, `coupon_code` and the dates are still written to the YAML, because they drive what the post says and what the owner sees in the queue, but Metricool does not send them as fields. An offer's code, dates and how to redeem go into the text.
+- Links in the text are not clickable on Google. Write the action as a sentence.
+
+**Receipts:** `createScheduledPost` returns a `plannerUrl`. Store it in the YAML as `metricool_planner_url` and move the file to `gbp-queue/scheduled/`. A file in `scheduled/` or `sent/` is never scheduled again. `getScheduledPosts` shows anything Metricool failed to publish.
+
+**When to use the Make.com route instead:** only when the owner wants a real Offer post (Google's yellow badge, coupon field, redeem link) or a real Event post. Mark that post `route: make`. Everything from here down that talks about the Make.com router, webhook or field mapping applies to that route only. The writing rules apply to both.
+
+---
+
+## Never do these - they break the Make.com router (Make.com route only)
 
 These are the most common mistakes. Never produce any of them.
 
@@ -47,7 +67,7 @@ If you find yourself about to output `type: update`, stop. The correct output is
 
 ---
 
-## Setting up the webhook once
+## Optional: the Make.com route - setting up the webhook once
 
 Set these during client onboarding. The skill POSTs every generated post to `MAKE_WEBHOOK_URL`.
 
@@ -300,7 +320,7 @@ Good: "basement smells like sewage in winter" · "no hot water on weekends".
 
 ## Choosing the post type
 
-The `post_type` field accepts exactly one of three strings, spelled exactly as Make.com expects. Any other value breaks the router.
+The `post_type` field accepts exactly one of three strings, spelled exactly as Make.com expects. Any other value breaks the router. (On the Metricool route every post goes out as an update whatever `post_type` says; the field still tells you which formula the post follows.)
 
 **`"Call to action"`** - a post with an action button. Requires `cta_action` and `cta_url`.
 
@@ -533,7 +553,7 @@ So:
 
 ---
 
-## The machine payload - what gets sent to Make.com
+## The machine payload - what gets sent to Make.com (Make.com route only)
 
 Everything in this section is machine input, not human copy. It gets built at send time and POSTed to the Make.com webhook as plain-text JSON, then logged in `gbp-posts-queue.md` for deduping. None of it belongs in the queue file.
 

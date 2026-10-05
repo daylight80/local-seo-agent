@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
-"""Validate every gbp-queue/*.yml against the Make.com schema BEFORE it can send.
+"""Validate every gbp-queue/*.yml BEFORE it can be scheduled.
 
-Exists because a payload with post_type: "UPDATE", cta_type and image_url was
+Two routes. The default is Metricool: the post goes out as a Google Business
+Profile "publication" (title as the opening line, then the summary, plus one
+photo), so the checks are Google's length cap, the photo, the date and the
+spacing between posts. A file with `route: make` is checked against the
+optional Make.com webhook schema instead (real Offer/Event post types).
+
+The Make.com checks exist because a payload with post_type: "UPDATE", cta_type and image_url was
 written, passed every human review, got a 200 from Make, and published nothing
 useful - the Router matched no branch. A 200 is not proof of a correct payload.
 
 Run: python3 code/check_gbp_payload.py [path-or-dir]
 Exit 0 = every file is sendable. Exit 1 = at least one is not.
 """
-import pathlib, re, sys, yaml
+import datetime, pathlib, re, sys, yaml
+
+MAX_PER_WEEK = 3
+MIN_GAP_DAYS = 2
 
 LEGAL_TYPES = {"Call to action", "Event", "Offer"}
 
@@ -33,15 +42,64 @@ BY_TYPE = {
 LEGAL_CTA = {"BOOK", "ORDER", "SHOP", "LEARN_MORE", "SIGN_UP", "CALL", "GET_OFFER"}
 
 
-def check(path):
-    errs = []
+def load(path):
     try:
         d = yaml.safe_load(path.read_text())
     except Exception as e:
-        return [f"unparseable YAML: {e}"]
+        return None, [f"unparseable YAML: {e}"]
     if not isinstance(d, dict):
-        return ["not a YAML mapping"]
+        return None, ["not a YAML mapping"]
+    return d, []
 
+
+def send_date(d):
+    try:
+        return datetime.date.fromisoformat(str(d.get("send_after", ""))[:10])
+    except ValueError:
+        return None
+
+
+def check_metricool(d):
+    """Metricool publishes a GBP "publication": text up to 1,500 characters
+    plus one photo. No title field, no button, no Offer/Event types."""
+    errs = []
+    for f in ["title", "summary", "media_items", "send_after"]:
+        if not str(d.get(f, "")).strip():
+            errs.append(f"missing required field: {f}")
+    for wrong, right in [("image_url", "media_items"), ("image", "media_items"),
+                         ("media", "media_items"), ("body", "summary"), ("text", "summary")]:
+        if wrong in d:
+            errs.append(f'field "{wrong}" is not read - rename it to "{right}"')
+
+    title = str(d.get("title", "")).strip()
+    if len(title) > 58:
+        errs.append(f'title is {len(title)} characters - keep it to 58: "{title[:55]}..."')
+    text = f"{title}\n\n{str(d.get('summary', '')).strip()}"
+    if len(text) > 1500:
+        errs.append(f"title + summary is {len(text)} characters - Google caps an update "
+                    f"at 1,500, and the title is sent as the opening line")
+
+    day = send_date(d)
+    if d.get("send_after") and not day:
+        errs.append(f"send_after {d.get('send_after')!r} is not a YYYY-MM-DD date")
+    elif day and day < datetime.date.today() and not d.get("metricool_planner_url"):
+        errs.append(f"send_after {day} is in the past - Metricool refuses past dates")
+    return errs
+
+
+def check(path):
+    d, errs = load(path)
+    if d is None:
+        return errs
+    if str(d.get("route", "metricool")).lower() == "make":
+        errs = check_make(d)
+    else:
+        errs = check_metricool(d)
+    return errs + check_media_and_summary(d)
+
+
+def check_make(d):
+    errs = []
     for wrong, right in RENAMED.items():
         if wrong in d:
             errs.append(f'field "{wrong}" is not read by Make - rename it to "{right}"')
@@ -75,6 +133,11 @@ def check(path):
             errs.append(f'{field} is {len(v)} characters - Google caps it at {cap}. '
                         f'Shorten it: "{v[:cap - 3]}..."')
 
+    return errs
+
+
+def check_media_and_summary(d):
+    errs = []
     media = str(d.get("media_items", ""))
     if media:
         if not media.startswith("https://"):
@@ -110,8 +173,30 @@ def check(path):
                      (r"(?m)^#+ ", "# headings render as literal hashes")]:
         if re.search(pat, s):
             errs.append(f"summary contains markdown: {why}")
-    if not s.strip():
-        errs.append("summary is empty")
+    return errs
+
+
+def check_spacing(files):
+    """Max 3 posts a week, at least 2 days apart, across everything queued,
+    scheduled or sent - so a mistake in the dates cannot cause a burst."""
+    dated = []
+    for f in files:
+        d, _ = load(f)
+        day = send_date(d) if d else None
+        if day:
+            dated.append((day, f.name))
+    dated.sort()
+    errs = []
+    for (a, fa), (b, fb) in zip(dated, dated[1:]):
+        if (b - a).days < MIN_GAP_DAYS:
+            errs.append(f"{fa} ({a}) and {fb} ({b}) are under {MIN_GAP_DAYS} days apart")
+    weeks = {}
+    for day, name in dated:
+        weeks.setdefault(day.isocalendar()[:2], []).append(name)
+    for (year, week), names in weeks.items():
+        if len(names) > MAX_PER_WEEK:
+            errs.append(f"week {week} of {year} has {len(names)} posts - the cap is "
+                        f"{MAX_PER_WEEK}: {', '.join(names)}")
     return errs
 
 
@@ -122,6 +207,10 @@ def main():
         print(f"No .yml files in {target} - nothing queued, so nothing will ever send.")
         return 1
     bad = 0
+    # Spacing is checked against everything already scheduled or sent too.
+    root = target if target.is_dir() else target.parent
+    every = files + [f for sub in ("scheduled", "sent") for f in sorted((root / sub).glob("*.yml"))]
+    spacing = check_spacing(every)
     for f in files:
         errs = check(f)
         if errs:
@@ -131,8 +220,12 @@ def main():
                 print(f"        - {e}")
         else:
             print(f"ok    {f.name}")
+    if spacing:
+        print("\nFAIL  spacing")
+        for e in spacing:
+            print(f"        - {e}")
     print(f"\n{len(files) - bad}/{len(files)} sendable")
-    return 1 if bad else 0
+    return 1 if bad or spacing else 0
 
 
 if __name__ == "__main__":
